@@ -92,7 +92,7 @@ for i, t in enumerate(sim_ts):
 
     if update_ctrl[i]:
 
-        odom.update(sim.xs[-1][3], sim.xs[-1][4], sim.xs[-1][2])
+        odom.update(talon_l.getReading() / ticks_per_meter, talon_r.getReading() / ticks_per_meter, sim.xs[-1][2])
 
         if j < len(traj_ts):
             v_adj, w_adj = ramsete.calculate(traj[j, 0:3], v_goal[j], w_goal[j], odom.get())
