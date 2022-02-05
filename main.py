@@ -7,7 +7,7 @@ from Drivetrain import Drivetrain, DrivetrainSim
 from Motor import Motor
 from Odometry import Odometry
 from TrajectoryGenerator import compute_smoothed_traj, modify_traj_with_limits
-from TalonSRX import TalonSRX, TalonSRXControlMode
+from MotorController import MotorController, MotorControllerMode
 from Ramsete import Ramsete
 
 SIM_DT = 0.001
@@ -30,8 +30,8 @@ r_wheel = 0.051 # m
 r_base = 0.56 # m
 G_ratio = 6
 
-neo = Motor(V_nominal, w_free, T_stall, I_stall, I_free, n_motors_per_side)
-drivetrain = Drivetrain(neo, m_robot, r_wheel, r_base, J_robot, G_ratio)
+motor = Motor(V_nominal, w_free, T_stall, I_stall, I_free, n_motors_per_side)
+drivetrain = Drivetrain(motor, m_robot, r_wheel, r_base, J_robot, G_ratio)
 
 # xy waypoints for straight path
 # path = np.array([
@@ -65,14 +65,14 @@ x_0 = traj[0, 0:3] # initial state
 sim = DrivetrainSim(drivetrain, np.append(x_0, np.zeros(4)))
 odom = Odometry(np.append(x_0, np.zeros(2)))
 
-talon_base = TalonSRX()
-ticks_per_meter, ticks_per_100ms_per_meter_per_second = talon_base.get_conversions(r_wheel)
+controller_base = MotorController()
+ticks_per_meter, ticks_per_100ms_per_meter_per_second = controller_base.get_conversions(r_wheel)
 
-talon_base.P = 0.015
-talon_base.F = 1023 / (w_free / G_ratio * r_wheel * ticks_per_100ms_per_meter_per_second)
+controller_base.P = 0.015
+controller_base.F = 1023 / (w_free / G_ratio * r_wheel * ticks_per_100ms_per_meter_per_second)
 
-talon_l = talon_base
-talon_r = copy.deepcopy(talon_base)
+controller_l = controller_base
+controller_r = copy.deepcopy(controller_base)
 
 ramsete = Ramsete(b=2.0, zeta=0.8)
 
@@ -92,7 +92,7 @@ for i, t in enumerate(sim_ts):
 
     if update_ctrl[i]:
 
-        odom.update(talon_l.getReading() / ticks_per_meter, talon_r.getReading() / ticks_per_meter, sim.xs[-1][2])
+        odom.update(controller_l.get_reading() / ticks_per_meter, controller_r.get_reading() / ticks_per_meter, sim.xs[-1][2])
 
         if j < len(traj_ts):
             v_adj, w_adj = ramsete.calculate(traj[j, 0:3], v_goal[j], w_goal[j], odom.get())
@@ -104,21 +104,21 @@ for i, t in enumerate(sim_ts):
         v_l = v_adj - w_adj * r_base
         v_r = v_adj + w_adj * r_base
 
-        talon_l.set(TalonSRXControlMode.Velocity, v_l * ticks_per_100ms_per_meter_per_second)
-        talon_r.set(TalonSRXControlMode.Velocity, v_r * ticks_per_100ms_per_meter_per_second)
+        controller_l.set(MotorControllerMode.Velocity, v_l * ticks_per_100ms_per_meter_per_second)
+        controller_r.set(MotorControllerMode.Velocity, v_r * ticks_per_100ms_per_meter_per_second)
 
         j += 1
 
-    talon_l.update()
-    talon_r.update()
+    controller_l.update()
+    controller_r.update()
 
-    V_l = talon_l.getMotorOutputVoltage()
-    V_r = talon_r.getMotorOutputVoltage()
+    V_l = controller_l.get_motor_output_voltage()
+    V_r = controller_r.get_motor_output_voltage()
 
     sim.step((V_l, V_r), SIM_DT)
 
-    talon_l.pushReading(sim.xs[-1][3] * ticks_per_meter)
-    talon_r.pushReading(sim.xs[-1][4] * ticks_per_meter)
+    controller_l.push_reading(sim.xs[-1][3] * ticks_per_meter)
+    controller_r.push_reading(sim.xs[-1][4] * ticks_per_meter)
 
 xs = np.array(sim.xs)
 us = np.array(sim.us)
